@@ -43,19 +43,25 @@ static NSString* currentNonce; // used for Apple Sign In
 
 - (void)pluginInitialize {
     NSLog(@"Starting Firebase plugin");
-    
+
     firebasePlugin = self;
-    
+
     @try {
         // Check for permission and register for remote notifications if granted
         [self _hasPermission:^(BOOL result) {}];
-        
+
         [GIDSignIn sharedInstance].presentingViewController = self.viewController;
-        
+
         authCredentials = [[NSMutableDictionary alloc] init];
     }@catch (NSException *exception) {
         [self handlePluginExceptionWithoutContext:exception];
     }
+}
+
+// @override abstract
+- (void)handleOpenURL:(NSNotification*)notification{
+    NSURL* url = [notification object];
+    [[GIDSignIn sharedInstance] handleURL:url];
 }
 
 - (void)setAutoInitEnabled:(CDVInvokedUrlCommand *)command {
@@ -131,7 +137,7 @@ static NSString* currentNonce; // used for Apple Sign In
             }else{
                 pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:error.description];
             }
-            
+
             [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
         }];
     }@catch (NSException *exception) {
@@ -164,7 +170,7 @@ static NSString* currentNonce; // used for Apple Sign In
     if (dataLength == 0) {
         return nil;
     }
-      
+
     const unsigned char *dataBuffer = data.bytes;
     NSMutableString *hexString  = [NSMutableString stringWithCapacity:(dataLength * 2)];
     for (int i = 0; i < dataLength; ++i) {
@@ -249,7 +255,7 @@ static NSString* currentNonce; // used for Apple Sign In
 - (void)registerForRemoteNotifications {
     NSLog(@"registerForRemoteNotifications");
     if(registeredForRemoteNotifications) return;
-    
+
     [self runOnMainThread:^{
         @try {
             [[UIApplication sharedApplication] registerForRemoteNotifications];
@@ -281,7 +287,7 @@ static NSString* currentNonce; // used for Apple Sign In
     [self runOnMainThread:^{
         @try {
             long badge = [[UIApplication sharedApplication] applicationIconBadgeNumber];
-            
+
             CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDouble:badge];
             [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
         }@catch (NSException *exception) {
@@ -436,7 +442,7 @@ static NSString* currentNonce; // used for Apple Sign In
         @try {
             [[UIApplication sharedApplication] setApplicationIconBadgeNumber:1];
             [[UIApplication sharedApplication] setApplicationIconBadgeNumber:0];
-            
+
             CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
             [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
         }@catch (NSException *exception) {
@@ -521,7 +527,7 @@ static NSString* currentNonce; // used for Apple Sign In
     @try {
         self.googleSignInCallbackId = command.callbackId;
         [[GIDSignIn sharedInstance] signIn];
-        
+
         CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_NO_RESULT];
         [pluginResult setKeepCallbackAsBool:YES];
         [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
@@ -536,13 +542,13 @@ static NSString* currentNonce; // used for Apple Sign In
         if (@available(iOS 13.0, *)) {
             self.appleSignInCallbackId = command.callbackId;
             [self startSignInWithAppleFlow];
-            
+
             pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_NO_RESULT];
             [pluginResult setKeepCallbackAsBool:YES];
         } else {
             pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"OS version is too low - Apple Sign In requires iOS 13.0+"];
         }
-        
+
         [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
     }@catch (NSException *exception) {
         [self handlePluginExceptionWithContext:exception :command];
@@ -553,7 +559,7 @@ static NSString* currentNonce; // used for Apple Sign In
     @try {
         FIRAuthCredential* credential = [self obtainAuthCredential:[command.arguments objectAtIndex:0] command:command];
         if(credential == nil) return;
-        
+
         [[FIRAuth auth] signInWithCredential:credential
                                   completion:^(FIRAuthDataResult * _Nullable authResult,
                                                NSError * _Nullable error) {
@@ -571,10 +577,10 @@ static NSString* currentNonce; // used for Apple Sign In
             [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"No user is currently signed"] callbackId:command.callbackId];
             return;
         }
-        
+
         FIRAuthCredential* credential = [self obtainAuthCredential:[command.arguments objectAtIndex:0] command:command];
         if(credential == nil) return;
-        
+
         [user reauthenticateWithCredential:credential completion:^(FIRAuthDataResult * _Nullable authResult, NSError * _Nullable error) {
             [self handleAuthResult:authResult error:error command:command];
         }];
@@ -587,13 +593,13 @@ static NSString* currentNonce; // used for Apple Sign In
     @try {
         FIRAuthCredential* credential = [self obtainAuthCredential:[command.arguments objectAtIndex:0] command:command];
         if(credential == nil) return;
-        
+
         [[FIRAuth auth].currentUser linkWithCredential:credential
                                   completion:^(FIRAuthDataResult * _Nullable authResult,
                                                NSError * _Nullable error) {
             [self handleAuthResult:authResult error:error command:command];
         }];
-        
+
     }@catch (NSException *exception) {
         [self handlePluginExceptionWithContext:exception :command];
     }
@@ -603,7 +609,7 @@ static NSString* currentNonce; // used for Apple Sign In
     @try {
         bool isSignedIn = [FIRAuth auth].currentUser ? true : false;
         [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsBool:isSignedIn] callbackId:command.callbackId];
-        
+
     }@catch (NSException *exception) {
         [self handlePluginExceptionWithContext:exception :command];
     }
@@ -629,14 +635,14 @@ static NSString* currentNonce; // used for Apple Sign In
 }
 
 - (void)getCurrentUser:(CDVInvokedUrlCommand *)command {
-    
+
     @try {
         FIRUser* user = [FIRAuth auth].currentUser;
         if(!user){
             [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"No user is currently signed"] callbackId:command.callbackId];
             return;
         }
-        
+
         NSMutableDictionary* userInfo = [NSMutableDictionary new];
         [userInfo setValue:user.displayName forKey:@"name"];
         [userInfo setValue:user.email forKey:@"email"];
@@ -661,9 +667,9 @@ static NSString* currentNonce; // used for Apple Sign In
             [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"No user is currently signed"] callbackId:command.callbackId];
             return;
         }
-        
+
         NSDictionary* profile = [command.arguments objectAtIndex:0];
-        
+
         FIRUserProfileChangeRequest* changeRequest = [user profileChangeRequest];
         if([profile objectForKey:@"name"] != nil){
             changeRequest.displayName = [profile objectForKey:@"name"];
@@ -671,7 +677,7 @@ static NSString* currentNonce; // used for Apple Sign In
         if([profile objectForKey:@"photoUri"] != nil){
             changeRequest.photoURL = [NSURL URLWithString:[profile objectForKey:@"photoUri"]];
         }
-        
+
         [changeRequest commitChangesWithCompletion:^(NSError *_Nullable error) {
           @try {
               [self handleResultWithPotentialError:error command:command];
@@ -691,7 +697,7 @@ static NSString* currentNonce; // used for Apple Sign In
             [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"No user is currently signed"] callbackId:command.callbackId];
             return;
         }
-        
+
         NSString* email = [command.arguments objectAtIndex:0];
         [user updateEmail:email completion:^(NSError *_Nullable error) {
           @try {
@@ -712,7 +718,7 @@ static NSString* currentNonce; // used for Apple Sign In
             [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"No user is currently signed"] callbackId:command.callbackId];
             return;
         }
-        
+
         [user sendEmailVerificationWithCompletion:^(NSError *_Nullable error) {
           @try {
               [self handleResultWithPotentialError:error command:command];
@@ -732,7 +738,7 @@ static NSString* currentNonce; // used for Apple Sign In
             [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"No user is currently signed"] callbackId:command.callbackId];
             return;
         }
-        
+
         NSString* password = [command.arguments objectAtIndex:0];
         [user updatePassword:password completion:^(NSError *_Nullable error) {
           @try {
@@ -768,7 +774,7 @@ static NSString* currentNonce; // used for Apple Sign In
             [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"No user is currently signed"] callbackId:command.callbackId];
             return;
         }
-        
+
         [user deleteWithCompletion:^(NSError *_Nullable error) {
           @try {
               [self handleResultWithPotentialError:error command:command];
@@ -936,17 +942,17 @@ static NSString* currentNonce; // used for Apple Sign In
 - (void)logError:(CDVInvokedUrlCommand *)command {
     [self.commandDelegate runInBackground:^{
         NSString* errorMessage = [command.arguments objectAtIndex:0];
-        
+
         CDVCommandStatus status = CDVCommandStatus_OK;
         @try {
             // We can optionally be passed a stack trace from stackTrace.js which we'll put in userInfo.
             if ([command.arguments count] > 1) {
                 NSArray* stackFrames = [command.arguments objectAtIndex:1];
-                
+
                 NSString* message = errorMessage;
                 NSString* name = @"Uncaught Javascript exception";
                 NSMutableArray *customFrames = [[NSMutableArray alloc] init];
-                
+
                 for (NSDictionary* stackFrame in stackFrames) {
                     CLSStackFrame *customFrame = [CLSStackFrame stackFrame];
                     [customFrame setSymbol:stackFrame[@"functionName"]];
@@ -967,7 +973,7 @@ static NSString* currentNonce; // used for Apple Sign In
             CLSNSLog(@"Exception in logError: %@, original error: %@", exception.description, errorMessage);
             status = CDVCommandStatus_ERROR;
         }
-        
+
         CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:status];
         [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
     }];
@@ -1241,17 +1247,17 @@ static NSString* currentNonce; // used for Apple Sign In
 
 - (FIRAuthCredential*)obtainAuthCredential:(NSDictionary*)credential command:(CDVInvokedUrlCommand *)command {
     FIRAuthCredential* authCredential = nil;
-    
+
     if(credential == nil){
         NSString* errMsg = @"credential object must be passed as first and only argument";
         [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:errMsg] callbackId:command.callbackId];
         return authCredential;
     }
-    
+
     NSString* key = [credential objectForKey:@"id"];
     NSString* verificationId = [credential objectForKey:@"verificationId"];
     NSString* code = [credential objectForKey:@"code"];
-    
+
     if(key != nil){
         authCredential = [authCredentials objectForKey:key];
         if(authCredential == nil){
@@ -1291,7 +1297,7 @@ static NSString* currentNonce; // used for Apple Sign In
     while (key < 0 || [authCredentials objectForKey:[NSNumber numberWithInt:key]] != nil) {
         key = arc4random_uniform(100000);
     }
-    
+
     [authCredentials setObject:authCredential forKey:[NSNumber numberWithInt:key]];
 
     return key;
